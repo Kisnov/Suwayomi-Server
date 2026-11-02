@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - (**API**) Answer 424 instead of 500 when a source fails
+- (**Auth**) Never accept credentials when `authUsername` or `authPassword` is blank, so an empty basic auth header or login form can no longer authenticate as the admin
 - (**Auth**) Stop logging routine expired-token rejections as errors
 - (**Backup**) Restore reading history for existing chapters omitted from a file backup's chapter records
 - (**Backup/API**) Fix restore mutations timing out when progress notifications arrive before subscription

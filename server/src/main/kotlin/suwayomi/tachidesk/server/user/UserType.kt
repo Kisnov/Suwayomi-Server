@@ -53,13 +53,21 @@ fun UserType.requireUserWithBasicFallback(ctx: Context): Int =
 
 /**
  * Whether [username]/[password] match the configured `authUsername`/`authPassword`.
+ *
+ * Both settings default to "", so blank configured credentials never match. Otherwise an empty
+ * `Authorization: Basic Og==` header or an empty login form would authenticate as the admin.
  */
 fun credentialsMatchConfig(
     username: String?,
     password: String?,
-): Boolean =
-    username == serverConfig.authUsername.value &&
-        password == serverConfig.authPassword.value
+): Boolean {
+    val configuredUsername = serverConfig.authUsername.value
+    val configuredPassword = serverConfig.authPassword.value
+    if (configuredUsername.isBlank() || configuredPassword.isBlank()) {
+        return false
+    }
+    return username == configuredUsername && password == configuredPassword
+}
 
 /**
  * Whether the request's basic auth credentials match the configured `authUsername`/`authPassword`.
@@ -71,8 +79,13 @@ fun Context.basicAuthMatchesConfig(): Boolean {
 
 /**
  * Whether the `logged-in` session attribute (set by the SIMPLE_LOGIN form) names the configured `authUsername`.
+ *
+ * A blank configured username never matches, see [credentialsMatchConfig].
  */
-fun loggedInUsernameMatchesConfig(username: String?): Boolean = username != null && username == serverConfig.authUsername.value
+fun loggedInUsernameMatchesConfig(username: String?): Boolean {
+    val configuredUsername = serverConfig.authUsername.value
+    return configuredUsername.isNotBlank() && username == configuredUsername
+}
 
 suspend fun getUserFromToken(token: String?): UserType {
     if (serverConfig.authMode.value != AuthMode.UI_LOGIN) {
