@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - (**API**) Add User Accounts
+- (**API/Auth**) Accept Basic Auth credentials on GraphQL JSON requests in every auth mode, so clients without a login flow (e.g. dashboard widgets) keep working with `SIMPLE_LOGIN` and `UI_LOGIN`
 - (**Database**) Add indexes on ChapterTable and ChapterUserTable for faster queries
 - (**Database/Settings/API**) Add setting `databaseSchema` to be able to configure the database schema name
 - (**Database/Settings/API**) Add setting `hikariMaxPoolSize` to be able to configure the maximum number of connections to the database
