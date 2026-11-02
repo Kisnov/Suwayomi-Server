@@ -3,6 +3,7 @@ package suwayomi.tachidesk.server.user
 import io.javalin.http.Context
 import io.javalin.http.Header
 import io.javalin.security.BasicAuthCredentials
+import io.javalin.websocket.WsConnectContext
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -183,6 +184,22 @@ class UserContextTest : GraphQLTest() {
             every { ctx.cookie("suwayomi-server-token") } returns tokens.accessToken
 
             val user = getUserFromContext(ctx)
+
+            assertIs<UserType.User>(user)
+            assertEquals(userId, user.id)
+        }
+
+    @Test
+    fun basicAuthorizationHeaderIsNotTreatedAsTokenOnWebSocket() =
+        runTest {
+            val userId = createTestUser("jwtbasicwsuser")
+            val tokens = Jwt.generateJwt(userId)
+
+            val wsCtx = mockk<WsConnectContext>(relaxed = true)
+            every { wsCtx.header(Header.AUTHORIZATION) } returns "Basic YWRtaW46c2VjcmV0"
+            every { wsCtx.cookie("suwayomi-server-token") } returns tokens.accessToken
+
+            val user = getUserFromWsContext(wsCtx)
 
             assertIs<UserType.User>(user)
             assertEquals(userId, user.id)
