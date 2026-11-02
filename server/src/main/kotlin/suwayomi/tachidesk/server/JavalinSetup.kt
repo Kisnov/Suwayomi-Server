@@ -48,6 +48,9 @@ import suwayomi.tachidesk.opds.OpdsAPI
 import suwayomi.tachidesk.server.user.ForbiddenException
 import suwayomi.tachidesk.server.user.UnauthorizedException
 import suwayomi.tachidesk.server.user.UserType
+import suwayomi.tachidesk.server.user.basicAuthMatchesConfig
+import suwayomi.tachidesk.server.user.credentialsMatchConfig
+import suwayomi.tachidesk.server.user.loggedInUsernameMatchesConfig
 import suwayomi.tachidesk.server.user.getUserFromContext
 import suwayomi.tachidesk.server.user.getUserFromWsContext
 import suwayomi.tachidesk.server.util.Browser
@@ -221,9 +224,7 @@ object JavalinSetup {
             val sessionToken = ctx.sessionAttribute<String>("form-csrf-token")
             val username = ctx.formParam("user")
             val password = ctx.formParam("pass")
-            val isValid =
-                username == serverConfig.authUsername.value &&
-                    password == serverConfig.authPassword.value
+            val isValid = credentialsMatchConfig(username, password)
 
             val error =
                 if (sessionToken == null || ctx.formParam("csrf-token") != sessionToken) {
@@ -278,17 +279,9 @@ object JavalinSetup {
 
             val authMode = serverConfig.authMode.value
 
-            fun credentialsValid(): Boolean {
-                val basicAuthCredentials = ctx.basicAuthCredentials() ?: return false
-                val (username, password) = basicAuthCredentials
-                return username == serverConfig.authUsername.value &&
-                    password == serverConfig.authPassword.value
-            }
+            fun credentialsValid(): Boolean = ctx.basicAuthMatchesConfig()
 
-            fun cookieValid(): Boolean {
-                val username = ctx.sessionAttribute<String>("logged-in") ?: return false
-                return username == serverConfig.authUsername.value
-            }
+            fun cookieValid(): Boolean = loggedInUsernameMatchesConfig(ctx.sessionAttribute<String>("logged-in"))
 
             if (authMode == AuthMode.SIMPLE_LOGIN && !cookieValid() && !isApi) {
                 val url =
@@ -319,12 +312,7 @@ object JavalinSetup {
         wsBeforeUpgrade { ctx ->
             val authMode = serverConfig.authMode.value
 
-            fun credentialsValid(): Boolean {
-                val basicAuthCredentials = ctx.basicAuthCredentials() ?: return false
-                val (username, password) = basicAuthCredentials
-                return username == serverConfig.authUsername.value &&
-                    password == serverConfig.authPassword.value
-            }
+            fun credentialsValid(): Boolean = ctx.basicAuthMatchesConfig()
 
             if (authMode == AuthMode.BASIC_AUTH && !credentialsValid()) {
                 ctx.header("WWW-Authenticate", "Basic")

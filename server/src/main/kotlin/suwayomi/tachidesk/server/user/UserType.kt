@@ -51,6 +51,29 @@ fun UserType.requireUserWithBasicFallback(ctx: Context): Int =
         }
     }
 
+/**
+ * Whether [username]/[password] match the configured `authUsername`/`authPassword`.
+ */
+fun credentialsMatchConfig(
+    username: String?,
+    password: String?,
+): Boolean =
+    username == serverConfig.authUsername.value &&
+        password == serverConfig.authPassword.value
+
+/**
+ * Whether the request's basic auth credentials match the configured `authUsername`/`authPassword`.
+ */
+fun Context.basicAuthMatchesConfig(): Boolean {
+    val (username, password) = basicAuthCredentials() ?: return false
+    return credentialsMatchConfig(username, password)
+}
+
+/**
+ * Whether the `logged-in` session attribute (set by the SIMPLE_LOGIN form) names the configured `authUsername`.
+ */
+fun loggedInUsernameMatchesConfig(username: String?): Boolean = username != null && username == serverConfig.authUsername.value
+
 suspend fun getUserFromToken(token: String?): UserType {
     if (serverConfig.authMode.value != AuthMode.UI_LOGIN) {
         return UserType.Admin(1)
@@ -81,10 +104,7 @@ fun UserType.requirePermissions(vararg permissions: UserPermission) {
 }
 
 suspend fun getUserFromContext(ctx: Context): UserType {
-    fun cookieValid(): Boolean {
-        val username = ctx.sessionAttribute<String>("logged-in") ?: return false
-        return username == serverConfig.authUsername.value
-    }
+    fun cookieValid(): Boolean = loggedInUsernameMatchesConfig(ctx.sessionAttribute<String>("logged-in"))
 
     return when (serverConfig.authMode.value) {
         // NOTE: Basic Auth is expected to have been validated by JavalinSetup
@@ -106,10 +126,7 @@ suspend fun getUserFromContext(ctx: Context): UserType {
 }
 
 suspend fun getUserFromWsContext(ctx: WsConnectContext): UserType {
-    fun cookieValid(): Boolean {
-        val username = ctx.sessionAttribute<String>("logged-in") ?: return false
-        return username == serverConfig.authUsername.value
-    }
+    fun cookieValid(): Boolean = loggedInUsernameMatchesConfig(ctx.sessionAttribute<String>("logged-in"))
 
     return when (serverConfig.authMode.value) {
         // NOTE: Basic Auth is expected to have been validated by JavalinSetup
