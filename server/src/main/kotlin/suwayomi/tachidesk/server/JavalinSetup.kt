@@ -50,9 +50,9 @@ import suwayomi.tachidesk.server.user.UnauthorizedException
 import suwayomi.tachidesk.server.user.UserType
 import suwayomi.tachidesk.server.user.basicAuthMatchesConfig
 import suwayomi.tachidesk.server.user.credentialsMatchConfig
-import suwayomi.tachidesk.server.user.loggedInUsernameMatchesConfig
 import suwayomi.tachidesk.server.user.getUserFromContext
 import suwayomi.tachidesk.server.user.getUserFromWsContext
+import suwayomi.tachidesk.server.user.loggedInUsernameMatchesConfig
 import suwayomi.tachidesk.server.util.Browser
 import suwayomi.tachidesk.server.util.ServerSubpath
 import suwayomi.tachidesk.server.util.WebInterfaceManager
