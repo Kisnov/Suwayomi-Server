@@ -14,8 +14,11 @@ import io.javalin.websocket.WsConfig
 import suwayomi.tachidesk.graphql.server.TachideskGraphQLServer
 import suwayomi.tachidesk.graphql.server.TemporaryFileStorage
 import suwayomi.tachidesk.graphql.types.AuthMode
+import suwayomi.tachidesk.server.JavalinSetup.Attribute
 import suwayomi.tachidesk.server.JavalinSetup.future
+import suwayomi.tachidesk.server.JavalinSetup.getAttribute
 import suwayomi.tachidesk.server.serverConfig
+import suwayomi.tachidesk.server.user.withBasicCredentials
 import kotlin.io.path.inputStream
 
 object GraphQLController {
@@ -43,6 +46,18 @@ object GraphQLController {
             ctx.status(401)
             ctx.result("CSRF mismatch")
             return
+        }
+        if (!isFormContentType) {
+            // Clients without a login flow (e.g. dashboard widgets) may authenticate with Basic credentials in every auth mode.
+            // Only for JSON: a cross-site page can't make a browser attach its cached Basic credentials to a JSON request,
+            // that needs a CORS preflight, which fails because our CORS rule doesn't allow credentials
+            val user = ctx.getAttribute(Attribute.TachideskUser).withBasicCredentials(ctx)
+            if (user == null) {
+                ctx.status(HttpStatus.UNAUTHORIZED)
+                ctx.result("Invalid credentials")
+                return
+            }
+            ctx.attribute(Attribute.TachideskUser.name, user)
         }
         ctx.future {
             future {
