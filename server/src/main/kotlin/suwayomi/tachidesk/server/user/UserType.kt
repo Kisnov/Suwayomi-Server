@@ -51,6 +51,46 @@ fun UserType.requireUserWithBasicFallback(ctx: Context): Int =
         }
     }
 
+/**
+ * Whether [username]/[password] match the configured `authUsername`/`authPassword`.
+ *
+ * Both settings default to "", so blank configured credentials never match. Otherwise an empty
+ * `Authorization: Basic Og==` header or an empty login form would authenticate as the admin.
+ */
+fun credentialsMatchConfig(
+    username: String?,
+    password: String?,
+): Boolean {
+    val configuredUsername = serverConfig.authUsername.value
+    val configuredPassword = serverConfig.authPassword.value
+    if (configuredUsername.isBlank() || configuredPassword.isBlank()) {
+        return false
+    }
+    return username == configuredUsername && password == configuredPassword
+}
+
+/**
+ * Whether the request's basic auth credentials match the configured `authUsername`/`authPassword`.
+ */
+fun Context.basicAuthMatchesConfig(): Boolean {
+    val (username, password) = basicAuthCredentials() ?: return false
+    return credentialsMatchConfig(username, password)
+}
+
+/**
+ * Whether the `logged-in` session attribute (set by the SIMPLE_LOGIN form) names the configured `authUsername`.
+ *
+ * Like [credentialsMatchConfig], nothing matches while either configured value is blank, so clearing
+ * `authPassword` also ends existing sessions.
+ */
+fun loggedInUsernameMatchesConfig(username: String?): Boolean {
+    val configuredUsername = serverConfig.authUsername.value
+    if (configuredUsername.isBlank() || serverConfig.authPassword.value.isBlank()) {
+        return false
+    }
+    return username == configuredUsername
+}
+
 suspend fun getUserFromToken(token: String?): UserType {
     if (serverConfig.authMode.value != AuthMode.UI_LOGIN) {
         return UserType.Admin(1)
@@ -81,10 +121,7 @@ fun UserType.requirePermissions(vararg permissions: UserPermission) {
 }
 
 suspend fun getUserFromContext(ctx: Context): UserType {
-    fun cookieValid(): Boolean {
-        val username = ctx.sessionAttribute<String>("logged-in") ?: return false
-        return username == serverConfig.authUsername.value
-    }
+    fun cookieValid(): Boolean = loggedInUsernameMatchesConfig(ctx.sessionAttribute<String>("logged-in"))
 
     return when (serverConfig.authMode.value) {
         // NOTE: Basic Auth is expected to have been validated by JavalinSetup
@@ -106,10 +143,7 @@ suspend fun getUserFromContext(ctx: Context): UserType {
 }
 
 suspend fun getUserFromWsContext(ctx: WsConnectContext): UserType {
-    fun cookieValid(): Boolean {
-        val username = ctx.sessionAttribute<String>("logged-in") ?: return false
-        return username == serverConfig.authUsername.value
-    }
+    fun cookieValid(): Boolean = loggedInUsernameMatchesConfig(ctx.sessionAttribute<String>("logged-in"))
 
     return when (serverConfig.authMode.value) {
         // NOTE: Basic Auth is expected to have been validated by JavalinSetup
