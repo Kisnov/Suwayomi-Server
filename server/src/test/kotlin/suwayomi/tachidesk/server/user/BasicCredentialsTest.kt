@@ -162,6 +162,13 @@ class BasicCredentialsTest : GraphQLTest() {
     }
 
     @Test
+    fun loggedInSessionIsRejectedWhenConfiguredPasswordIsEmpty() {
+        configure(AuthMode.SIMPLE_LOGIN, "admin", "")
+
+        assertFalse(loggedInUsernameMatchesConfig("admin"))
+    }
+
+    @Test
     fun matchingLoggedInSessionIsAccepted() {
         configure(AuthMode.SIMPLE_LOGIN, "admin", "secret")
 

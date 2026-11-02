@@ -80,11 +80,15 @@ fun Context.basicAuthMatchesConfig(): Boolean {
 /**
  * Whether the `logged-in` session attribute (set by the SIMPLE_LOGIN form) names the configured `authUsername`.
  *
- * A blank configured username never matches, see [credentialsMatchConfig].
+ * Like [credentialsMatchConfig], nothing matches while either configured value is blank, so clearing
+ * `authPassword` also ends existing sessions.
  */
 fun loggedInUsernameMatchesConfig(username: String?): Boolean {
     val configuredUsername = serverConfig.authUsername.value
-    return configuredUsername.isNotBlank() && username == configuredUsername
+    if (configuredUsername.isBlank() || serverConfig.authPassword.value.isBlank()) {
+        return false
+    }
+    return username == configuredUsername
 }
 
 suspend fun getUserFromToken(token: String?): UserType {
