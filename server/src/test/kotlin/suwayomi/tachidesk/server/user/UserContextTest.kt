@@ -2,6 +2,7 @@ package suwayomi.tachidesk.server.user
 
 import io.javalin.http.Context
 import io.javalin.http.Header
+import io.javalin.security.BasicAuthCredentials
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -11,9 +12,11 @@ import suwayomi.tachidesk.global.impl.util.Jwt
 import suwayomi.tachidesk.graphql.types.AuthMode
 import suwayomi.tachidesk.server.serverConfig
 import suwayomi.tachidesk.test.GraphQLTest
+import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 /**
  * Tests the HTTP-level authentication seam: [getUserFromContext] parsing the bearer token (or
@@ -30,17 +33,33 @@ class UserContextTest : GraphQLTest() {
     // constructor runs before @BeforeAll has set up the app, so serverConfig is not yet
     // available at construction time.
     private lateinit var originalAuthMode: AuthMode
+    private lateinit var originalAuthUsername: String
+    private lateinit var originalAuthPassword: String
 
     @BeforeEach
     fun setUp() {
         ctx = mockk<Context>(relaxed = true)
         originalAuthMode = serverConfig.authMode.value
+        originalAuthUsername = serverConfig.authUsername.value
+        originalAuthPassword = serverConfig.authPassword.value
         serverConfig.authMode.value = AuthMode.UI_LOGIN
     }
 
     @AfterEach
     fun tearDown() {
         serverConfig.authMode.value = originalAuthMode
+        serverConfig.authUsername.value = originalAuthUsername
+        serverConfig.authPassword.value = originalAuthPassword
+    }
+
+    private fun basic(
+        ctx: Context,
+        username: String,
+        password: String,
+    ) {
+        val encoded = Base64.getEncoder().encodeToString("$username:$password".toByteArray())
+        every { ctx.header(Header.AUTHORIZATION) } returns "Basic $encoded"
+        every { ctx.basicAuthCredentials() } returns BasicAuthCredentials(username, password)
     }
 
     private fun bearer(
@@ -153,4 +172,69 @@ class UserContextTest : GraphQLTest() {
             assertIs<UserType.Admin>(user)
             assertEquals(1, user.id)
         }
+
+    @Test
+    fun basicAuthorizationHeaderIsNotTreatedAsToken() =
+        runTest {
+            val userId = createTestUser("jwtbasiccookieuser")
+            val tokens = Jwt.generateJwt(userId)
+
+            basic(ctx, "admin", "secret")
+            every { ctx.cookie("suwayomi-server-token") } returns tokens.accessToken
+
+            val user = getUserFromContext(ctx)
+
+            assertIs<UserType.User>(user)
+            assertEquals(userId, user.id)
+        }
+
+    @Test
+    fun validBasicCredentialsResolveVisitorToAdmin() {
+        serverConfig.authUsername.value = "admin"
+        serverConfig.authPassword.value = "secret"
+        basic(ctx, "admin", "secret")
+
+        val user = UserType.Visitor.withBasicCredentials(ctx)
+
+        assertIs<UserType.Admin>(user)
+        assertEquals(1, user.id)
+    }
+
+    @Test
+    fun invalidBasicCredentialsAreRejected() {
+        serverConfig.authUsername.value = "admin"
+        serverConfig.authPassword.value = "secret"
+        basic(ctx, "admin", "wrong")
+
+        assertNull(UserType.Visitor.withBasicCredentials(ctx))
+    }
+
+    @Test
+    fun emptyBasicCredentialsAreRejectedWithoutConfiguredCredentials() {
+        serverConfig.authUsername.value = ""
+        serverConfig.authPassword.value = ""
+        basic(ctx, "", "")
+
+        assertNull(UserType.Visitor.withBasicCredentials(ctx))
+    }
+
+    @Test
+    fun missingBasicCredentialsKeepVisitor() {
+        every { ctx.basicAuthCredentials() } returns null
+
+        assertIs<UserType.Visitor>(UserType.Visitor.withBasicCredentials(ctx))
+    }
+
+    @Test
+    fun basicCredentialsDoNotReplaceAuthenticatedUser() {
+        serverConfig.authUsername.value = "admin"
+        serverConfig.authPassword.value = "secret"
+        basic(ctx, "admin", "secret")
+        val loggedIn = UserType.User(id = 42, permissions = emptyList())
+
+        val user = loggedIn.withBasicCredentials(ctx)
+
+        assertIs<UserType.User>(user)
+        assertEquals(42, user.id)
+    }
 }
