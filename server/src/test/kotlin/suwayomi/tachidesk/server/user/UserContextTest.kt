@@ -7,9 +7,17 @@ import io.javalin.websocket.WsConnectContext
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
+import suwayomi.tachidesk.global.impl.util.Bcrypt
 import suwayomi.tachidesk.global.impl.util.Jwt
+import suwayomi.tachidesk.global.model.table.UserAccountTable
+import suwayomi.tachidesk.global.model.table.UserPermissionsTable
+import suwayomi.tachidesk.global.model.table.UserRolesTable
 import suwayomi.tachidesk.graphql.types.AuthMode
 import suwayomi.tachidesk.server.serverConfig
 import suwayomi.tachidesk.test.GraphQLTest
@@ -206,7 +214,8 @@ class UserContextTest : GraphQLTest() {
         }
 
     @Test
-    fun validBasicCredentialsResolveVisitorToAdmin() {
+    fun validConfiguredBasicCredentialsResolveVisitorToAdmin() {
+        serverConfig.authMode.value = AuthMode.SIMPLE_LOGIN
         serverConfig.authUsername.value = "admin"
         serverConfig.authPassword.value = "secret"
         basic(ctx, "admin", "secret")
@@ -218,7 +227,8 @@ class UserContextTest : GraphQLTest() {
     }
 
     @Test
-    fun invalidBasicCredentialsAreRejected() {
+    fun invalidConfiguredBasicCredentialsAreRejected() {
+        serverConfig.authMode.value = AuthMode.SIMPLE_LOGIN
         serverConfig.authUsername.value = "admin"
         serverConfig.authPassword.value = "secret"
         basic(ctx, "admin", "wrong")
@@ -228,6 +238,7 @@ class UserContextTest : GraphQLTest() {
 
     @Test
     fun emptyBasicCredentialsAreRejectedWithoutConfiguredCredentials() {
+        serverConfig.authMode.value = AuthMode.SIMPLE_LOGIN
         serverConfig.authUsername.value = ""
         serverConfig.authPassword.value = ""
         basic(ctx, "", "")
@@ -244,6 +255,7 @@ class UserContextTest : GraphQLTest() {
 
     @Test
     fun basicCredentialsDoNotReplaceAuthenticatedUser() {
+        serverConfig.authMode.value = AuthMode.SIMPLE_LOGIN
         serverConfig.authUsername.value = "admin"
         serverConfig.authPassword.value = "secret"
         basic(ctx, "admin", "secret")
@@ -253,5 +265,54 @@ class UserContextTest : GraphQLTest() {
 
         assertIs<UserType.User>(user)
         assertEquals(42, user.id)
+    }
+
+    @Test
+    fun uiLoginBasicCredentialsResolveToAccountWithItsPermissions() {
+        val userId = createTestUser("basicaccountuser")
+        transaction {
+            UserRolesTable.insert {
+                it[UserRolesTable.user] = userId
+                it[UserRolesTable.role] = UserRole.USER.name
+            }
+            UserPermissionsTable.insert {
+                it[UserPermissionsTable.user] = userId
+                it[UserPermissionsTable.permission] = UserPermission.MANAGE_USERS.name
+            }
+        }
+        // the account name is matched case-insensitively, like the login mutation
+        basic(ctx, "BasicAccountUser", "password")
+
+        val user = UserType.Visitor.withBasicCredentials(ctx)
+
+        assertIs<UserType.User>(user)
+        assertEquals(userId, user.id)
+        assertEquals(listOf(UserPermission.MANAGE_USERS), user.permissions)
+    }
+
+    @Test
+    fun uiLoginRejectsWrongPasswordAndUnknownAccount() {
+        createTestUser("basicwrongpassuser")
+
+        basic(ctx, "basicwrongpassuser", "wrong")
+        assertNull(UserType.Visitor.withBasicCredentials(ctx))
+
+        basic(ctx, "basicmissinguser", "password")
+        assertNull(UserType.Visitor.withBasicCredentials(ctx))
+    }
+
+    @Test
+    fun verifiedCredentialsStopWorkingAfterPasswordChange() {
+        val userId = createTestUser("basicpasswordchangeuser")
+        assertEquals(userId, UserCredentials.verify("basicpasswordchangeuser", "password"))
+
+        transaction {
+            UserAccountTable.update({ UserAccountTable.id eq userId }) {
+                it[UserAccountTable.password] = Bcrypt.encryptPassword("newpassword")
+            }
+        }
+
+        assertNull(UserCredentials.verify("basicpasswordchangeuser", "password"))
+        assertEquals(userId, UserCredentials.verify("basicpasswordchangeuser", "newpassword"))
     }
 }
