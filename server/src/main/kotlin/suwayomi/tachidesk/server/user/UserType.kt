@@ -138,13 +138,20 @@ private fun String?.ignoreBasic(): String? = this?.takeUnless { it.startsWith("B
  * Lets API clients without a login flow (e.g. dashboard widgets) authenticate with Basic credentials
  * in every auth mode, the same way OPDS clients can with [requireUserWithBasicFallback].
  *
+ * With [AuthMode.UI_LOGIN] the credentials of any user account are accepted, and resolve to that user with its
+ * roles and permissions. The other modes have a single account, configured with `authUsername`/`authPassword`.
+ *
  * Only a [UserType.Visitor] is resolved, an existing session or token always takes precedence.
  *
- * @return the admin for valid credentials, `null` for invalid ones, or the unchanged user if no Basic credentials were sent
+ * @return the user for valid credentials, `null` for invalid ones, or the unchanged user if no Basic credentials were sent
  */
 fun UserType.withBasicCredentials(ctx: Context): UserType? {
     if (this !is UserType.Visitor) return this
     val (username, password) = ctx.basicAuthCredentials() ?: return this
+
+    if (serverConfig.authMode.value == AuthMode.UI_LOGIN) {
+        return UserCredentials.verify(username, password)?.let(UserCredentials::loadUser)
+    }
 
     val expectedUsername = serverConfig.authUsername.value
     val expectedPassword = serverConfig.authPassword.value

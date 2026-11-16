@@ -27,6 +27,7 @@ import suwayomi.tachidesk.server.JavalinSetup.Attribute
 import suwayomi.tachidesk.server.JavalinSetup.future
 import suwayomi.tachidesk.server.user.SessionVersion
 import suwayomi.tachidesk.server.user.UserCodeService
+import suwayomi.tachidesk.server.user.UserCredentials
 import suwayomi.tachidesk.server.user.UserPermission
 import suwayomi.tachidesk.server.user.UserRole
 import suwayomi.tachidesk.server.user.UserType
@@ -54,16 +55,10 @@ class UserMutation {
             throw IllegalArgumentException("Cannot login while already logged-in")
         }
 
-        val user =
-            transaction {
-                UserAccountTable
-                    .selectAll()
-                    .where { UserAccountTable.username.lowerCase() eq input.username.lowercase() }
-                    .firstOrNull()
-            }
-        if (user != null && Bcrypt.verify(user[UserAccountTable.password], input.password)) {
+        val userId = UserCredentials.verify(input.username, input.password)
+        if (userId != null) {
             return future {
-                val jwt = Jwt.generateJwt(user[UserAccountTable.id].value)
+                val jwt = Jwt.generateJwt(userId)
                 LoginPayload(
                     clientMutationId = input.clientMutationId,
                     accessToken = jwt.accessToken,
