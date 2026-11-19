@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Clone repo
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the version is the commit count, the WebUI picks a compatible release from it
 
       - name: Set up JDK
         uses: actions/setup-java@v6
